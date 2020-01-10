@@ -2,8 +2,14 @@
 
 from setuptools import setup, find_packages
 
-setup
-(
+'''
+How to build and upload this package to PyPi
+    python setup.py sdist
+    python setup.py bdist_wheel --universal
+    twine upload dist/*
+'''
+
+setup (
     name='robotframework-comparelibrary',
     version='0.0.1',
     description='Robot Framework keyword library for textual diffing',

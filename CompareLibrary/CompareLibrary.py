@@ -93,8 +93,8 @@ class POSIXCompare:
         if not os.path.isfile(file2):
             raise DiffException('ERROR: %s is not a file' % (file2))
 
-        file1content = open(file1, 'U').readlines()
-        file2content = open(file2, 'U').readlines()
+        file1content = open(file1, mode='r').readlines()
+        file2content = open(file2, mode='r').readlines()
 
         m_lcs = self.lcslen(file1content,file2content)
         m_ResultList = []
@@ -137,8 +137,6 @@ class CompareLibrary:
 
         (m_WorkFilePath,m_TempFileName) = os.path.split(p_szWorkFile);
         (m_ShortWorkFileName,m_WorkFileExtension) = os.path.splitext(m_TempFileName);
-        (m_ReferenceFilePath,m_TempFileName) = os.path.split(p_szReferenceFile);
-        (m_ShortReferenceFileName,m_ReferenceFileExtension) = os.path.splitext(m_TempFileName);
         m_DifFilePath = m_WorkFilePath
         m_DifFileName = m_ShortWorkFileName + '.dif'
         m_DifFullFileName = os.path.join(m_DifFilePath,m_DifFileName)
@@ -146,9 +144,38 @@ class CompareLibrary:
         m_SucFileName = m_ShortWorkFileName + '.suc'
         m_SucFullFileName = os.path.join(m_SucFilePath,m_SucFileName)
 
+        # remove old file first
+        if os.path.exists(m_DifFullFileName):
+            os.remove(m_DifFullFileName)
+        if os.path.exists(m_SucFullFileName):
+            os.remove(m_SucFullFileName)
+
+        # check if work file exist
+        if not os.path.isfile(p_szWorkFile):
+            m_CompareResultFile = open(m_DifFullFileName,'w')
+            m_CompareResultFile.write('===============   work log [' + p_szWorkFile + '] does not exist ============')
+            m_CompareResultFile.close()
+            return
+
+        # search reference log 
+        m_ReferenceLog = None
+        for m_Reference_LogDir in self.Reference_LogDirLists:
+            m_TempReferenceLog = os.path.join(m_Reference_LogDir, p_szReferenceFile)
+            if os.path.isfile(m_TempReferenceLog):
+                m_ReferenceLog = m_TempReferenceLog
+                break
+        if m_ReferenceLog == None:
+            m_ReferenceLog = p_szReferenceFile
+        if not os.path.isfile(m_ReferenceLog):
+            m_CompareResultFile = open(m_DifFullFileName,'w')
+            m_CompareResultFile.write('===============   reference log [' + m_ReferenceLog + '] does not exist ============')
+            m_CompareResultFile.close()
+            return
+
+        # compare file
         m_Comparer = POSIXCompare()
         m_Comparer.set_compare_options(CompareOptions)
-        m_CompareResult = m_Comparer.compare_text_files(p_szWorkFile,p_szReferenceFile)
+        m_CompareResult = m_Comparer.compare_text_files(p_szWorkFile,m_ReferenceLog)
 
         if (m_CompareResult[0] == True):
             m_CompareResultFile = open(m_SucFullFileName,'w')
