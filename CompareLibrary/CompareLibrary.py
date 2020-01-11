@@ -155,7 +155,7 @@ class CompareLibrary:
             m_CompareResultFile = open(m_DifFullFileName,'w')
             m_CompareResultFile.write('===============   work log [' + p_szWorkFile + '] does not exist ============')
             m_CompareResultFile.close()
-            return
+            return False
 
         # search reference log 
         m_ReferenceLog = None
@@ -170,7 +170,7 @@ class CompareLibrary:
             m_CompareResultFile = open(m_DifFullFileName,'w')
             m_CompareResultFile.write('===============   reference log [' + m_ReferenceLog + '] does not exist ============')
             m_CompareResultFile.close()
-            return
+            return False
 
         # compare file
         m_Comparer = POSIXCompare()
@@ -180,14 +180,14 @@ class CompareLibrary:
         if (m_CompareResult[0] == True):
             m_CompareResultFile = open(m_SucFullFileName,'w')
             m_CompareResultFile.close()
+            return True
 
         if (m_CompareResult[0] == False):
             m_CompareResultFile = open(m_DifFullFileName,'w')
             for line in m_CompareResult[1]:
                 m_CompareResultFile.write(line)
             m_CompareResultFile.close()
-
-        return
+            return False
 
 def main():
     print("Start CompareLibrary Test ...")    
