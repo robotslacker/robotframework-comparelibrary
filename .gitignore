@@ -1,4 +1,13 @@
-.vscode/*
-build/*
-dist/*
-robotframework_comparelibrary.egg-info/*
+.idea/
+.vscode/
+.cache/
+.coverage/
+/localtest
+/build
+/dist
+/*.egg-info
+
+*.pyc
+*.deb
+*.swp
+
