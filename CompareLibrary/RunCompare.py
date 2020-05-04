@@ -2,7 +2,7 @@
 import os
 import argparse
 import re
-
+from robot.api import logger
 
 class DiffException(Exception):
     def __init__(self, message):
@@ -188,10 +188,13 @@ class RunCompare(object):
             return True
 
         if not m_CompareResult[0]:
+            logger.write("======= Diff file [" + m_DifFullFileName + "] >>>>> ")
             m_CompareResultFile = open(m_DifFullFileName, 'w')
             for line in m_CompareResult[1]:
                 m_CompareResultFile.write(line)
+                logger.write("    " + line);
             m_CompareResultFile.close()
+            logger.write("======= Diff file [" + m_DifFullFileName + "] <<<<<< ")
             if self.BreakWithDifference:
                 raise RuntimeError('Got Difference. Please check [' + m_DifFullFileName + '] for more information.')
             else:
