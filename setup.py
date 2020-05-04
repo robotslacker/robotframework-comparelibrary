@@ -15,12 +15,13 @@ setup (
     description='Robot Framework keyword library for textual diffing',
     keywords     = 'robotframework testing test automation diff textual',
     platforms    = 'any',
-    install_requires=['robotframework',],
+    install_requires=['robotframework', ],
 
     author='RobotSlacker',
     author_email='184902652@qq.com',
     url='https://github.com/robotslacker/robotframework-comparelibrary',
 
+    zip_safe=False,
     packages     = ['CompareLibrary'],
-    package_data = {'CompareLibrary': ['tests/*.txt']}
+    package_data = {'CompareLibrary': []}
 )   
