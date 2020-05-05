@@ -103,28 +103,53 @@ class POSIXCompare:
 
 
 class RunCompare(object):
-    """
-    *** Settings ***
-    Library   CompareLibrary
-
-    *** Testcases ***
-    Set REFLOG DIR
-        Set Reference LogDir  Dir1;Dir2;
-    Diff test log and reference log
-        Compare Files  test.log  testref.log [MASK] [IGNABL] [IGNABS]
-    """
-
     Reference_LogDirLists = []
     BreakWithDifference = False
 
     def Set_Break_With_Difference(self, p_BreakWithDifference):
+        """ 设置是否在遇到错误的时候中断该Case的后续运行
+        输入参数：
+             p_BreakWithDifference:        是否在遇到Dif的时候中断，默认为不中断
+        返回值：
+            无
+
+        如果设置为True，则Case运行会中断，Case会被判断执行失败
+        如果设置为False，则Case运行不会中断，但是在运行目录下会生成一个.dif文件，供参考
+        """
         if str(p_BreakWithDifference).upper() == 'TRUE':
             self.BreakWithDifference = True
 
     def Set_Reference_LogDir(self, p_szPath):
+        """ 设置参考文件的来源目录
+          Compare 在比对的时候会按照如下顺序来查找引用文件：
+          1： 当前文件运行目录
+          2：  p_szPath中指定的目录
+
+        输入参数：
+             p_szPath:        用冒号：分开的一个或多个路径信息
+        返回值：
+            无
+
+        例外：
+            无
+        """
         self.Reference_LogDirLists = p_szPath.split(':')
 
     def Compare_Files(self, p_szWorkFile, p_szReferenceFile, *rest):
+        """ 比较两个文件是否一致
+        输入参数：
+             p_szWorkFile:        需要比对的当前结果文件
+             p_szReferenceFile：  需要比对的结果参考文件
+             *rest:               其他比对选项，支持的选项有：
+                  MASK            表示结果参考文件中可以有正则表达式内容
+
+        返回值：
+            True           比对完成成功
+            False          比对中发现了差异
+
+        例外：
+            在Set_Break_With_Difference为True后，若比对发现差异，则抛出例外
+        """
         CompareOptions = argparse.Namespace()
         if 'MASK' in rest:
             CompareOptions.isMaskEnabled = True
