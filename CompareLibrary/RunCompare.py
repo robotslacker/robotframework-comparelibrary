@@ -1,8 +1,9 @@
 # -*- coding: UTF-8 -*-
 import os
-import argparse
 import re
 from robot.api import logger
+import shlex
+
 
 class DiffException(Exception):
     def __init__(self, message):
@@ -11,11 +12,11 @@ class DiffException(Exception):
 
 
 class POSIXCompare:
-    compare_options = argparse.Namespace()
     compare_result = True
+    compare_maskEnabled = False
 
     def __init__(self):
-        self.compare_options.isMaskEnabled = False
+        pass
 
     def lcs_len(self, x, y):
         """Build a matrix of LCS length.
@@ -52,10 +53,13 @@ class POSIXCompare:
         c = self.lcs_len(x, y)
         return self.backtrack(c, x, y, len(x) - 1, len(y) - 1)
 
+    # 正则表达比较两个字符串
+    # p_str1 原字符串
+    # p_str2 正则表达式
     def compare_string(self, p_str1, p_str2):
-        if not self.compare_options.isMaskEnabled:
+        if not self.compare_maskEnabled:
             return p_str1 == p_str2
-        if self.compare_options.isMaskEnabled:
+        else:
             return re.match(p_str2, p_str1) is not None
 
     def compare(self, c, x, y, i, j, p_result):
@@ -84,18 +88,60 @@ class POSIXCompare:
             p_result.append("- " + x[i])
         return self.compare_result, p_result
 
-    def set_compare_options(self, options):
-        self.compare_options = options
-
-    def compare_text_files(self, file1, file2):
+    def compare_text_files(self, file1, file2,
+                           skiplines=None, ignoreEmptyLine=False,
+                           CompareWithMask = None):
         if not os.path.isfile(file1):
             raise DiffException('ERROR: %s is not a file' % file1)
         if not os.path.isfile(file2):
             raise DiffException('ERROR: %s is not a file' % file2)
 
-        file1content = open(file1, mode='r').readlines()
-        file2content = open(file2, mode='r').readlines()
+        # 是否需要用正则表达是比较
+        self.compare_maskEnabled = CompareWithMask
 
+        file1content = open(file1, mode='r', encoding='utf-8').readlines()
+        file2content = open(file2, mode='r', encoding='utf-8').readlines()
+
+        # 去除在SkipLine里头的所有内容
+        if skiplines is not None:
+            m_nPos = 0
+            while m_nPos < len(file1content):
+                bMatch = False
+                for pattern in skiplines:
+                    if self.compare_string(file1content[m_nPos], pattern):
+                        file1content.pop(m_nPos)
+                        bMatch = True
+                        break
+                if not bMatch:
+                    m_nPos = m_nPos + 1
+
+            m_nPos = 0
+            while m_nPos < len(file2content):
+                bMatch = False
+                for pattern in skiplines:
+                    if self.compare_string(file2content[m_nPos], pattern):
+                        file2content.pop(m_nPos)
+                        bMatch = True
+                        break
+                if not bMatch:
+                    m_nPos = m_nPos + 1
+
+        # 去除所有的空行
+        if ignoreEmptyLine:
+            m_nPos = 0
+            while m_nPos < len(file1content):
+                if len(file1content[m_nPos].strip()) == 0:
+                    file1content.pop(m_nPos)
+                else:
+                    m_nPos = m_nPos + 1
+            m_nPos = 0
+            while m_nPos < len(file2content):
+                if len(file2content[m_nPos].strip()) == 0:
+                    file2content.pop(m_nPos)
+                else:
+                    m_nPos = m_nPos + 1
+
+        # 开始比较
         m_lcs = self.lcs_len(file1content, file2content)
         m_result = []
         return self.compare(m_lcs, file1content, file2content,
@@ -103,10 +149,29 @@ class POSIXCompare:
 
 
 class RunCompare(object):
-    Reference_LogDirLists = []
-    BreakWithDifference = False
+    __Reference_LogDirLists = None
+    __SkipLines = []
+    __BreakWithDifference = False
+    __IgnoreEmptyLine = False
+    __CompareWithMask = False
 
-    def Set_Break_With_Difference(self, p_BreakWithDifference):
+    def __init__(self):
+        pass
+
+    def Compare_Ignore_EmptyLine(self, p_IgnoreEmptyLine):
+        """ 设置是否在比对的时候忽略空白行
+        输入参数：
+             p_IgnoreEmptyLine:        是否忽略空白行，默认不忽略
+        返回值：
+            无
+
+        如果设置为True，则仅仅是空白行的差异不作为文件有差异
+        如果设置为False，则需要逐行比对
+        """
+        if str(p_IgnoreEmptyLine).upper() == 'TRUE':
+            self.__IgnoreEmptyLine = True
+
+    def Compare_Break_When_Difference(self, p_BreakWithDifference):
         """ 设置是否在遇到错误的时候中断该Case的后续运行
         输入参数：
              p_BreakWithDifference:        是否在遇到Dif的时候中断，默认为不中断
@@ -117,53 +182,99 @@ class RunCompare(object):
         如果设置为False，则Case运行不会中断，但是在运行目录下会生成一个.dif文件，供参考
         """
         if str(p_BreakWithDifference).upper() == 'TRUE':
-            self.BreakWithDifference = True
+            self.__BreakWithDifference = True
 
-    def Set_Reference_LogDir(self, p_szPath):
-        """ 设置参考文件的来源目录
-          Compare 在比对的时候会按照如下顺序来查找引用文件：
-          1： 当前文件运行目录
-          2：  p_szPath中指定的目录
+    def Compare_Skip(self, p_szSkipLine):
+        """ 设置是否在比对的时候忽略某些特殊行
+         输入参数：
+              p_szSkipLine:        特殊行的正则表达式
+         返回值：
+             无
 
-        输入参数：
-             p_szPath:        用冒号：分开的一个或多个路径信息
-        返回值：
-            无
+         可以重复执行来确定所有需要忽略的内容
+         """
 
-        例外：
-            无
-        """
-        self.Reference_LogDirLists = p_szPath.split(':')
+        if p_szSkipLine not in self.__SkipLines:
+            self.__SkipLines.append(p_szSkipLine)
 
-    def Compare_Files(self, p_szWorkFile, p_szReferenceFile, *rest):
+    def Clean_Skip(self):
+        """ 清空之前设置的忽略行
+         输入参数：
+             无
+         返回值：
+             无
+
+         可以重复执行来确定所有需要忽略的内容
+         """
+        self.__SkipLines = []
+
+    def Compare_Mask(self, p_szCompareWithMask):
+        """ 设置是否在比对的时候考虑正则表达式
+         输入参数：
+              p_szCompareWithMask:        在比对的时候是否考虑正则，默认是不考虑
+         返回值：
+             无
+
+         """
+        if str(p_szCompareWithMask).upper() == 'TRUE':
+            self.__CompareWithMask = True
+
+    def Compare_Files(self, p_szWorkFile, p_szReferenceFile):
         """ 比较两个文件是否一致
         输入参数：
              p_szWorkFile:        需要比对的当前结果文件
              p_szReferenceFile：  需要比对的结果参考文件
-             *rest:               其他比对选项，支持的选项有：
-                  MASK            表示结果参考文件中可以有正则表达式内容
 
         返回值：
             True           比对完成成功
             False          比对中发现了差异
 
         例外：
-            在Set_Break_With_Difference为True后，若比对发现差异，则抛出例外
+            在Compare_Break_With_Difference为True后，若比对发现差异，则抛出例外
         """
-        CompareOptions = argparse.Namespace()
-        if 'MASK' in rest:
-            CompareOptions.isMaskEnabled = True
-        else:
-            CompareOptions.isMaskEnabled = False
+        if self.__Reference_LogDirLists is None:
+            if "T_LOG" in os.environ:
+                T_LOG = os.environ["T_LOG"]
+                m_T_LOG_environs = shlex.shlex(T_LOG)
+                m_T_LOG_environs.whitespace = ','
+                m_T_LOG_environs.quotes = "'"
+                m_T_LOG_environs.whitespace_split = True
+                self.__Reference_LogDirLists = list(m_T_LOG_environs)
 
-        (m_WorkFilePath, m_TempFileName) = os.path.split(p_szWorkFile)
-        (m_ShortWorkFileName, m_WorkFileExtension) = os.path.splitext(m_TempFileName)
-        m_DifFilePath = m_WorkFilePath
-        m_DifFileName = m_ShortWorkFileName + '.dif'
-        m_DifFullFileName = os.path.join(m_DifFilePath, m_DifFileName)
-        m_SucFilePath = m_WorkFilePath
-        m_SucFileName = m_ShortWorkFileName + '.suc'
-        m_SucFullFileName = os.path.join(m_SucFilePath, m_SucFileName)
+        # 检查work文件是否存在，如果存在，则文件是全路径
+        if os.path.exists(p_szWorkFile):
+            # 传递的是全路径
+            (m_WorkFilePath, m_TempFileName) = os.path.split(p_szWorkFile)
+            (m_ShortWorkFileName, m_WorkFileExtension) = os.path.splitext(m_TempFileName)
+            # 如果定义了T_WORK，则dif文件生成在T_WORK下, 否则生成在当前目录下
+            if "T_WORK" in os.environ:
+                m_DifFilePath = os.environ["T_WORK"]
+                m_DifFileName = m_ShortWorkFileName + '.dif'
+                m_SucFilePath = os.environ["T_WORK"]
+                m_SucFileName = m_ShortWorkFileName + '.suc'
+            else:
+                m_DifFilePath = os.getcwd()
+                m_DifFileName = m_ShortWorkFileName + '.dif'
+                m_SucFilePath = os.getcwd()
+                m_SucFileName = m_ShortWorkFileName + '.suc'
+            m_DifFullFileName = os.path.join(m_DifFilePath, m_DifFileName)
+            m_SucFullFileName = os.path.join(m_SucFilePath, m_SucFileName)
+            m_szWorkFile = p_szWorkFile
+        else:
+            if "T_WORK" not in os.environ:
+                if self.__BreakWithDifference:
+                    raise RuntimeError('===============   work log [' + p_szWorkFile + '] does not exist ============')
+
+            # 传递的不是绝对路径，是相对路径
+            (m_ShortWorkFileName, m_WorkFileExtension) = os.path.splitext(p_szWorkFile)
+            # 如果定义了T_WORK，则dif文件生成在T_WORK下, 否则生成在当前目录下
+            m_DifFilePath = os.environ["T_WORK"]
+            m_DifFileName = m_ShortWorkFileName + '.dif'
+            m_SucFilePath = os.environ["T_WORK"]
+            m_SucFileName = m_ShortWorkFileName + '.suc'
+            m_DifFullFileName = os.path.join(m_DifFilePath, m_DifFileName)
+            m_SucFullFileName = os.path.join(m_SucFilePath, m_SucFileName)
+            m_szWorkFile = os.path.join(os.environ['T_WORK'], p_szWorkFile)
 
         # remove old file first
         if os.path.exists(m_DifFullFileName):
@@ -172,8 +283,8 @@ class RunCompare(object):
             os.remove(m_SucFullFileName)
 
         # check if work file exist
-        if not os.path.isfile(p_szWorkFile):
-            if self.BreakWithDifference:
+        if not os.path.isfile(m_szWorkFile):
+            if self.__BreakWithDifference:
                 raise RuntimeError('===============   work log [' + p_szWorkFile + '] does not exist ============')
             else:
                 m_CompareResultFile = open(m_DifFullFileName, 'w')
@@ -184,7 +295,7 @@ class RunCompare(object):
 
         # search reference log 
         m_ReferenceLog = None
-        for m_Reference_LogDir in self.Reference_LogDirLists:
+        for m_Reference_LogDir in self.__Reference_LogDirLists:
             m_TempReferenceLog = os.path.join(m_Reference_LogDir, p_szReferenceFile)
             if os.path.isfile(m_TempReferenceLog):
                 m_ReferenceLog = m_TempReferenceLog
@@ -192,10 +303,12 @@ class RunCompare(object):
         if m_ReferenceLog is None:
             m_ReferenceLog = p_szReferenceFile
         if not os.path.isfile(m_ReferenceLog):
-            if self.BreakWithDifference:
+            if self.__BreakWithDifference:
                 raise RuntimeError('===============   reference log [' + m_ReferenceLog +
                                    '] does not exist ============')
             else:
+                logger.info('===============   reference log [' + m_ReferenceLog +
+                            '] does not exist ============')
                 m_CompareResultFile = open(m_DifFullFileName, 'w')
                 m_CompareResultFile.write('===============   reference log [' + m_ReferenceLog +
                                           '] does not exist ============')
@@ -204,8 +317,12 @@ class RunCompare(object):
 
         # compare file
         m_Comparer = POSIXCompare()
-        m_Comparer.set_compare_options(CompareOptions)
-        m_CompareResult = m_Comparer.compare_text_files(p_szWorkFile, m_ReferenceLog)
+        try:
+            m_CompareResult = m_Comparer.compare_text_files(m_szWorkFile, m_ReferenceLog,
+                                                            self.__SkipLines, self.__IgnoreEmptyLine,
+                                                            self.__CompareWithMask)
+        except DiffException as de:
+            raise RuntimeError('Diff exception::' + de.message)
 
         if m_CompareResult[0]:
             m_CompareResultFile = open(m_SucFullFileName, 'w')
@@ -214,19 +331,23 @@ class RunCompare(object):
 
         if not m_CompareResult[0]:
             logger.write("======= Diff file [" + m_DifFullFileName + "] >>>>> ")
-            m_CompareResultFile = open(m_DifFullFileName, 'w')
+            m_CompareResultFile = open(m_DifFullFileName, 'w', encoding="utf-8")
             for line in m_CompareResult[1]:
                 m_CompareResultFile.write(line)
-                logger.write("    " + line);
+                logger.write("    " + line)
             m_CompareResultFile.close()
             logger.write("======= Diff file [" + m_DifFullFileName + "] <<<<<< ")
-            if self.BreakWithDifference:
+            if self.__BreakWithDifference:
                 raise RuntimeError('Got Difference. Please check [' + m_DifFullFileName + '] for more information.')
             else:
                 return False
 
 
 if __name__ == '__main__':
-    print("RunSQLCli. Please use this in RobotFramework.")
-    m_Handle = RunCompare()
-    m_Handle.Compare_Files("test.log", "test.ref", "MASK")
+    print("RunCompare. Please use this in RobotFramework.")
+    m_CompareHandle = RunCompare()
+    m_CompareHandle.Compare_Skip("Running.*")
+    m_CompareHandle.Compare_Ignore_EmptyLine("True")
+    m_CompareHandle.Compare_Mask("True")
+    m_CompareHandle.Compare_Files("C:\\工作\\linkoop\\linkoop-auto-test\\linkoopdb\\regression\\work\\e101.log",
+                                  "C:\\工作\\linkoop\\linkoop-auto-test\\linkoopdb\\regression\\tkex\\e101.ref")
