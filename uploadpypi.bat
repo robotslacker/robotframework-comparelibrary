@@ -6,4 +6,4 @@ python setup.py bdist_wheel --universal
 pip uninstall --yes robotframework-comparelibrary
 python setup.py install
 python -m robot.libdoc .\CompareLibrary doc\CompareLibrary.html
-twine upload dist/*
+REM twine upload dist/*

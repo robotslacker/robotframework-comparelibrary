@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 import os
 import re
+
 from robot.api import logger
 import shlex
 
@@ -57,10 +58,17 @@ class POSIXCompare:
     # p_str1 原字符串
     # p_str2 正则表达式
     def compare_string(self, p_str1, p_str2):
-        if not self.compare_maskEnabled:
-            return p_str1 == p_str2
+        if p_str1 == p_str2:
+            return True
         else:
-            return re.match(p_str2, p_str1) is not None
+            if not self.compare_maskEnabled:
+                return False
+            else:
+                try:
+                    return re.match(p_str2, p_str1) is not None
+                except re.error:
+                    # 正则表达式错误，可能是由于这并非是一个正则表达式
+                    return False
 
     def compare(self, c, x, y, i, j, p_result):
         """Print the diff using LCS length matrix by backtracking it"""
@@ -90,7 +98,7 @@ class POSIXCompare:
 
     def compare_text_files(self, file1, file2,
                            skiplines=None, ignoreEmptyLine=False,
-                           CompareWithMask = None):
+                           CompareWithMask=None):
         if not os.path.isfile(file1):
             raise DiffException('ERROR: %s is not a file' % file1)
         if not os.path.isfile(file2):
@@ -151,15 +159,39 @@ class POSIXCompare:
 class RunCompare(object):
     __Reference_LogDirLists = None
     __SkipLines = []
-    __BreakWithDifference = False
-    __IgnoreEmptyLine = False
-    __CompareWithMask = False
+    __BreakWithDifference = False             # 是否在遇到比对错误的时候抛出运行例外
+    __EnableConsoleOutPut = False             # 是否关闭在Console上的显示，默认是不关闭
+    __IgnoreEmptyLine = False                 # 是否在比对的时候忽略空白行
+    __CompareWithMask = False                 # 是否在比对的时候利用正则表达式
+    __CompareFailedCount = 0                  # Compare已经失败的个次数
 
     def __init__(self):
         pass
 
+    def Compare_Reset_FailedCount(self):
+        """ 清零之前统计的日志比对失败次数  """
+        """
+        输入参数：
+             无
+        返回值：
+            无
+        """
+        self.__CompareFailedCount = 0
+
+    def Compare_Check_Result(self):
+        """ 检查日志比对的失败次数，如果不是0，即抛出异常  """
+        """
+        输入参数：
+             无
+        返回值：
+            无
+        """
+        if self.__CompareFailedCount != 0:
+            raise RuntimeError("Total [" + str(self.__CompareFailedCount) + "] difs Found. Please double check.")
+
     def Compare_Ignore_EmptyLine(self, p_IgnoreEmptyLine):
-        """ 设置是否在比对的时候忽略空白行
+        """ 设置是否在比对的时候忽略空白行  """
+        """
         输入参数：
              p_IgnoreEmptyLine:        是否忽略空白行，默认不忽略
         返回值：
@@ -171,8 +203,26 @@ class RunCompare(object):
         if str(p_IgnoreEmptyLine).upper() == 'TRUE':
             self.__IgnoreEmptyLine = True
 
+    def Compare_Enable_ConsoleOutput(self, p_ConsoleOutput):
+        """ 设置是否在在屏幕上显示Dif文件的内容  """
+        """
+        输入参数：
+             p_ConsoleOutput:        是否在在屏幕上显示Dif文件的内容， 默认是不显示
+        返回值：
+            无
+
+        如果设置为True， 则所有Dif会显示在控制台上
+        如果设置为False，则所有SQL信息不会显示在控制台上
+        对于比对文件较大的场景，不建议将比对结果放在控制台上，会导致报告文件过大，而无法查看
+        """
+        if str(p_ConsoleOutput).upper() == 'TRUE':
+            self.__EnableConsoleOutPut = True
+        if str(p_ConsoleOutput).upper() == 'FALSE':
+            self.__EnableConsoleOutPut = False
+
     def Compare_Break_When_Difference(self, p_BreakWithDifference):
-        """ 设置是否在遇到错误的时候中断该Case的后续运行
+        """ 设置是否在遇到错误的时候中断该Case的后续运行  """
+        """
         输入参数：
              p_BreakWithDifference:        是否在遇到Dif的时候中断，默认为不中断
         返回值：
@@ -185,7 +235,8 @@ class RunCompare(object):
             self.__BreakWithDifference = True
 
     def Compare_Skip(self, p_szSkipLine):
-        """ 设置是否在比对的时候忽略某些特殊行
+        """ 设置是否在比对的时候忽略某些特殊行  """
+        """
          输入参数：
               p_szSkipLine:        特殊行的正则表达式
          返回值：
@@ -198,7 +249,8 @@ class RunCompare(object):
             self.__SkipLines.append(p_szSkipLine)
 
     def Clean_Skip(self):
-        """ 清空之前设置的忽略行
+        """ 清空之前设置的忽略行  """
+        """
          输入参数：
              无
          返回值：
@@ -209,7 +261,8 @@ class RunCompare(object):
         self.__SkipLines = []
 
     def Compare_Mask(self, p_szCompareWithMask):
-        """ 设置是否在比对的时候考虑正则表达式
+        """ 设置是否在比对的时候考虑正则表达式  """
+        """
          输入参数：
               p_szCompareWithMask:        在比对的时候是否考虑正则，默认是不考虑
          返回值：
@@ -220,7 +273,8 @@ class RunCompare(object):
             self.__CompareWithMask = True
 
     def Compare_Files(self, p_szWorkFile, p_szReferenceFile):
-        """ 比较两个文件是否一致
+        """ 比较两个文件是否一致  """
+        """
         输入参数：
              p_szWorkFile:        需要比对的当前结果文件
              p_szReferenceFile：  需要比对的结果参考文件
@@ -284,6 +338,7 @@ class RunCompare(object):
 
         # check if work file exist
         if not os.path.isfile(m_szWorkFile):
+            self.__CompareFailedCount = self.__CompareFailedCount + 1
             if self.__BreakWithDifference:
                 raise RuntimeError('===============   work log [' + p_szWorkFile + '] does not exist ============')
             else:
@@ -303,6 +358,7 @@ class RunCompare(object):
         if m_ReferenceLog is None:
             m_ReferenceLog = p_szReferenceFile
         if not os.path.isfile(m_ReferenceLog):
+            self.__CompareFailedCount = self.__CompareFailedCount + 1
             if self.__BreakWithDifference:
                 raise RuntimeError('===============   reference log [' + m_ReferenceLog +
                                    '] does not exist ============')
@@ -330,11 +386,13 @@ class RunCompare(object):
             return True
 
         if not m_CompareResult[0]:
+            self.__CompareFailedCount = self.__CompareFailedCount + 1
             logger.write("======= Diff file [" + m_DifFullFileName + "] >>>>> ")
             m_CompareResultFile = open(m_DifFullFileName, 'w', encoding="utf-8")
             for line in m_CompareResult[1]:
                 m_CompareResultFile.write(line)
-                logger.write("    " + line)
+                if self.__EnableConsoleOutPut:
+                    logger.write("    " + line)
             m_CompareResultFile.close()
             logger.write("======= Diff file [" + m_DifFullFileName + "] <<<<<< ")
             if self.__BreakWithDifference:
@@ -344,10 +402,4 @@ class RunCompare(object):
 
 
 if __name__ == '__main__':
-    print("RunCompare. Please use this in RobotFramework.")
-    m_CompareHandle = RunCompare()
-    m_CompareHandle.Compare_Skip("Running.*")
-    m_CompareHandle.Compare_Ignore_EmptyLine("True")
-    m_CompareHandle.Compare_Mask("True")
-    m_CompareHandle.Compare_Files("C:\\工作\\linkoop\\linkoop-auto-test\\linkoopdb\\regression\\work\\e101.log",
-                                  "C:\\工作\\linkoop\\linkoop-auto-test\\linkoopdb\\regression\\tkex\\e101.ref")
+    pass
