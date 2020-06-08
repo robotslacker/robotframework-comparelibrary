@@ -1,6 +1,7 @@
 # -*- coding: UTF-8 -*-
 import os
 import re
+import sys
 
 from robot.api import logger
 import shlex
@@ -17,7 +18,7 @@ class POSIXCompare:
     compare_maskEnabled = False
 
     def __init__(self):
-        pass
+        sys.setrecursionlimit(2500)
 
     def lcs_len(self, x, y):
         """Build a matrix of LCS length.
@@ -36,6 +37,7 @@ class POSIXCompare:
                     c[i][j] = 1 + c[i - 1][j - 1]
                 else:
                     c[i][j] = max(c[i][j - 1], c[i - 1][j])
+                pass
         return c
 
     def backtrack(self, c, x, y, i, j):
@@ -64,15 +66,15 @@ class POSIXCompare:
             if not self.compare_maskEnabled:
                 return False
             else:
+                # 由于re.match效率过于低下，考虑比较前20个字母
                 try:
-                    return re.match(p_str2, p_str1) is not None
+                    return re.search(p_str2, p_str1) is not None
                 except re.error:
                     # 正则表达式错误，可能是由于这并非是一个正则表达式
                     return False
 
     def compare(self, c, x, y, i, j, p_result):
         """Print the diff using LCS length matrix by backtracking it"""
-
         if i < 0 and j < 0:
             return p_result
         elif i < 0:
@@ -350,11 +352,12 @@ class RunCompare(object):
 
         # search reference log 
         m_ReferenceLog = None
-        for m_Reference_LogDir in self.__Reference_LogDirLists:
-            m_TempReferenceLog = os.path.join(m_Reference_LogDir, p_szReferenceFile)
-            if os.path.isfile(m_TempReferenceLog):
-                m_ReferenceLog = m_TempReferenceLog
-                break
+        if self.__Reference_LogDirLists is not None:
+            for m_Reference_LogDir in self.__Reference_LogDirLists:
+                m_TempReferenceLog = os.path.join(m_Reference_LogDir, p_szReferenceFile)
+                if os.path.isfile(m_TempReferenceLog):
+                    m_ReferenceLog = m_TempReferenceLog
+                    break
         if m_ReferenceLog is None:
             m_ReferenceLog = p_szReferenceFile
         if not os.path.isfile(m_ReferenceLog):
@@ -402,4 +405,10 @@ class RunCompare(object):
 
 
 if __name__ == '__main__':
+    myCompare = RunCompare()
+    sys.setrecursionlimit(2500)
+    #myCompare.Compare_Mask("TRUE")
+    myCompare.Compare_Files("C:\\Work\\linkoop\\robotframework-comparelibrary\\localtest\\join_number.log",
+                            "C:\\Work\\linkoop\\robotframework-comparelibrary\\localtest\\join_number.ref"
+                            )
     pass
