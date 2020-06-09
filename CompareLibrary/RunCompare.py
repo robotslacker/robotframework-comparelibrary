@@ -14,31 +14,11 @@ class DiffException(Exception):
 
 
 class POSIXCompare:
-    compare_result = True
     compare_maskEnabled = False
     CompiledRegexPattern = {}
 
     def __init__(self):
-        sys.setrecursionlimit(10000000)
-
-    def lcs_len(self, x, y):
-        """Build a matrix of LCS length.
-        This matrix will be used later to backtrack the real LCS.
-        """
-
-        # This is our matrix comprised of list of lists.
-        # We allocate extra row and column with zeroes for the base case of empty
-        # sequence. Extra row and column is appended to the end and exploit
-        # Python's ability of negative indices: x[-1] is the last elem.
-        c = [[0 for _ in range(len(y) + 1)] for _ in range(len(x) + 1)]
-
-        for i, xi in enumerate(x):
-            for j, yj in enumerate(y):
-                if self.compare_string(xi, yj):
-                    c[i][j] = 1 + c[i - 1][j - 1]
-                else:
-                    c[i][j] = max(c[i][j - 1], c[i - 1][j])
-        return c
+        pass
 
     # 正则表达比较两个字符串
     # p_str1 原字符串
@@ -61,7 +41,7 @@ class POSIXCompare:
                     # 正则表达式错误，可能是由于这并非是一个正则表达式
                     return False
 
-    def compare(self, c, x, y, i, j, p_result):
+    def compare(self, x, y):
         # LCS问题就是求两个字符串最长公共子串的问题。
         # 解法就是用一个矩阵来记录两个字符串中所有位置的两个字符之间的匹配情况，若是匹配则为1，否则为0。
         # 然后求出对角线最长的1序列，其对应的位置就是最长匹配子串的位置。
@@ -74,47 +54,63 @@ class POSIXCompare:
         # p_result    比对结果
         next_x = x
         next_y = y
-        next_i = i
-        next_j = j
+        next_i = len(x) - 1
+        next_j = len(y) - 1
 
+        # This is our matrix comprised of list of lists.
+        # We allocate extra row and column with zeroes for the base case of empty
+        # sequence. Extra row and column is appended to the end and exploit
+        # Python's ability of negative indices: x[-1] is the last elem.
+        # 构建LCS数组
+        c = [[0 for _ in range(len(y) + 1)] for _ in range(len(x) + 1)]
+        for i, xi in enumerate(x):
+            for j, yj in enumerate(y):
+                if self.compare_string(xi, yj):
+                    c[i][j] = 1 + c[i - 1][j - 1]
+                else:
+                    c[i][j] = max(c[i][j - 1], c[i - 1][j])
+
+        # 开始比较
+        compare_result = True
+        m_CompareDiffResult = []
         while True:
             if next_i < 0 and next_j < 0:
                 break
             elif next_i < 0:
-                self.compare_result = False
-                p_result.append("+ " + next_y[next_j])
+                compare_result = False
+                m_CompareDiffResult.append("+ " + next_y[next_j])
                 next_x = next_x
                 next_y = next_y
                 next_i = next_i
                 next_j = next_j - 1
             elif next_j < 0:
-                self.compare_result = False
-                p_result.append("- " + next_x[next_i])
+                compare_result = False
+                m_CompareDiffResult.append("- " + next_x[next_i])
                 next_x = next_x
                 next_y = next_y
                 next_i = next_i - 1
                 next_j = next_j
             elif self.compare_string(next_x[next_i], next_y[next_j]):
-                p_result.append("  " + next_x[next_i])
+                m_CompareDiffResult.append("  " + next_x[next_i])
                 next_x = next_x
                 next_y = next_y
                 next_i = next_i - 1
                 next_j = next_j - 1
             elif c[next_i][next_j - 1] >= c[next_i - 1][next_j]:
-                self.compare_result = False
-                p_result.append("+ " + next_y[next_j])
+                compare_result = False
+                m_CompareDiffResult.append("+ " + next_y[next_j])
                 next_x = next_x
                 next_y = next_y
                 next_i = next_i
                 next_j = next_j - 1
             elif c[next_i][next_j - 1] < c[next_i - 1][next_j]:
-                self.compare_result = False
-                p_result.append("- " + next_x[next_i])
+                compare_result = False
+                m_CompareDiffResult.append("- " + next_x[next_i])
                 next_x = next_x
                 next_y = next_y
                 next_i = next_i - 1
                 next_j = next_j
-        return self.compare_result, p_result
+        return compare_result, m_CompareDiffResult
 
     def compare_text_files(self, file1, file2,
                            skiplines=None, ignoreEmptyLine=False,
@@ -127,6 +123,7 @@ class POSIXCompare:
         # 是否需要用正则表达是比较
         self.compare_maskEnabled = CompareWithMask
 
+        # 将比较文件加载到数组
         file1content = open(file1, mode='r', encoding='utf-8').readlines()
         file2content = open(file2, mode='r', encoding='utf-8').readlines()
 
@@ -169,14 +166,10 @@ class POSIXCompare:
                 else:
                     m_nPos = m_nPos + 1
 
-        # 开始比较
-        m_lcs = self.lcs_len(file1content, file2content)
-        m_result = []
         # 输出两个信息
         # 1：  Compare的结果是否存在dif，True/False
         # 2:   Compare的Dif列表，注意：这里是一个翻转的列表
-        return self.compare(m_lcs, file1content, file2content,
-                            len(file1content) - 1, len(file2content) - 1, m_result)
+        return self.compare(file1content, file2content)
 
 
 class RunCompare(object):
@@ -399,9 +392,8 @@ class RunCompare(object):
         m_Comparer = POSIXCompare()
         try:
             # 这里的CompareResultList是一个被翻转了的列表，在输出的时候，需要翻转回来
-            (m_CompareResult, m_CompareResultList) = m_Comparer.compare_text_files(m_szWorkFile, m_ReferenceLog,
-                                                            self.__SkipLines, self.__IgnoreEmptyLine,
-                                                            self.__CompareWithMask)
+            (m_CompareResult, m_CompareResultList) = m_Comparer.compare_text_files(
+                m_szWorkFile, m_ReferenceLog, self.__SkipLines, self.__IgnoreEmptyLine, self.__CompareWithMask)
         except DiffException as de:
             raise RuntimeError('Diff exception::' + de.message)
 
