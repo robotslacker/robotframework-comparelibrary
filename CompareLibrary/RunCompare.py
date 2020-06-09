@@ -16,9 +16,10 @@ class DiffException(Exception):
 class POSIXCompare:
     compare_result = True
     compare_maskEnabled = False
+    CompiledRegexPattern = {}
 
     def __init__(self):
-        sys.setrecursionlimit(2500)
+        sys.setrecursionlimit(10000000)
 
     def lcs_len(self, x, y):
         """Build a matrix of LCS length.
@@ -37,24 +38,7 @@ class POSIXCompare:
                     c[i][j] = 1 + c[i - 1][j - 1]
                 else:
                     c[i][j] = max(c[i][j - 1], c[i - 1][j])
-                pass
         return c
-
-    def backtrack(self, c, x, y, i, j):
-        """Backtrack the LCS length matrix to get the actual LCS"""
-        if i == -1 or j == -1:
-            return ""
-        elif self.compare_string(x[i], y[j]):
-            return self.backtrack(c, x, y, i - 1, j - 1) + x[i]
-        elif c[i][j - 1] >= c[i - 1][j]:
-            return self.backtrack(c, x, y, i, j - 1)
-        elif c[i][j - 1] < c[i - 1][j]:
-            return self.backtrack(c, x, y, i - 1, j)
-
-    def lcs(self, x, y):
-        """Get the longest common subsequence of x and y"""
-        c = self.lcs_len(x, y)
-        return self.backtrack(c, x, y, len(x) - 1, len(y) - 1)
 
     # 正则表达比较两个字符串
     # p_str1 原字符串
@@ -66,36 +50,70 @@ class POSIXCompare:
             if not self.compare_maskEnabled:
                 return False
             else:
-                # 由于re.match效率过于低下，考虑比较前20个字母
                 try:
-                    return re.search(p_str2, p_str1) is not None
+                    if p_str2 in self.CompiledRegexPattern:
+                        m_CompiledPattern = self.CompiledRegexPattern[p_str2]
+                    else:
+                        m_CompiledPattern = re.compile(p_str2)
+                        self.CompiledRegexPattern[p_str2] = m_CompiledPattern
+                    return re.match(m_CompiledPattern, p_str1) is not None
                 except re.error:
                     # 正则表达式错误，可能是由于这并非是一个正则表达式
                     return False
 
     def compare(self, c, x, y, i, j, p_result):
-        """Print the diff using LCS length matrix by backtracking it"""
-        if i < 0 and j < 0:
-            return p_result
-        elif i < 0:
-            self.compare(c, x, y, i, j - 1, p_result)
-            self.compare_result = False
-            p_result.append("+ " + y[j])
-        elif j < 0:
-            self.compare(c, x, y, i - 1, j, p_result)
-            self.compare_result = False
-            p_result.append("- " + x[i])
-        elif self.compare_string(x[i], y[j]):
-            self.compare(c, x, y, i - 1, j - 1, p_result)
-            p_result.append("  " + x[i])
-        elif c[i][j - 1] >= c[i - 1][j]:
-            self.compare(c, x, y, i, j - 1, p_result)
-            self.compare_result = False
-            p_result.append("+ " + y[j])
-        elif c[i][j - 1] < c[i - 1][j]:
-            self.compare(c, x, y, i - 1, j, p_result)
-            self.compare_result = False
-            p_result.append("- " + x[i])
+        # LCS问题就是求两个字符串最长公共子串的问题。
+        # 解法就是用一个矩阵来记录两个字符串中所有位置的两个字符之间的匹配情况，若是匹配则为1，否则为0。
+        # 然后求出对角线最长的1序列，其对应的位置就是最长匹配子串的位置。
+
+        # c           LCS数组
+        # x           源数据
+        # y           目的数据
+        # i           源数据长度
+        # j           目的数据长度
+        # p_result    比对结果
+        next_x = x
+        next_y = y
+        next_i = i
+        next_j = j
+
+        while True:
+            if next_i < 0 and next_j < 0:
+                break
+            elif next_i < 0:
+                self.compare_result = False
+                p_result.append("+ " + next_y[next_j])
+                next_x = next_x
+                next_y = next_y
+                next_i = next_i
+                next_j = next_j - 1
+            elif next_j < 0:
+                self.compare_result = False
+                p_result.append("- " + next_x[next_i])
+                next_x = next_x
+                next_y = next_y
+                next_i = next_i - 1
+                next_j = next_j
+            elif self.compare_string(next_x[next_i], next_y[next_j]):
+                p_result.append("  " + next_x[next_i])
+                next_x = next_x
+                next_y = next_y
+                next_i = next_i - 1
+                next_j = next_j - 1
+            elif c[next_i][next_j - 1] >= c[next_i - 1][next_j]:
+                self.compare_result = False
+                p_result.append("+ " + next_y[next_j])
+                next_x = next_x
+                next_y = next_y
+                next_i = next_i
+                next_j = next_j - 1
+            elif c[next_i][next_j - 1] < c[next_i - 1][next_j]:
+                self.compare_result = False
+                p_result.append("- " + next_x[next_i])
+                next_x = next_x
+                next_y = next_y
+                next_i = next_i - 1
+                next_j = next_j
         return self.compare_result, p_result
 
     def compare_text_files(self, file1, file2,
@@ -154,6 +172,9 @@ class POSIXCompare:
         # 开始比较
         m_lcs = self.lcs_len(file1content, file2content)
         m_result = []
+        # 输出两个信息
+        # 1：  Compare的结果是否存在dif，True/False
+        # 2:   Compare的Dif列表，注意：这里是一个翻转的列表
         return self.compare(m_lcs, file1content, file2content,
                             len(file1content) - 1, len(file2content) - 1, m_result)
 
@@ -377,22 +398,23 @@ class RunCompare(object):
         # compare file
         m_Comparer = POSIXCompare()
         try:
-            m_CompareResult = m_Comparer.compare_text_files(m_szWorkFile, m_ReferenceLog,
+            # 这里的CompareResultList是一个被翻转了的列表，在输出的时候，需要翻转回来
+            (m_CompareResult, m_CompareResultList) = m_Comparer.compare_text_files(m_szWorkFile, m_ReferenceLog,
                                                             self.__SkipLines, self.__IgnoreEmptyLine,
                                                             self.__CompareWithMask)
         except DiffException as de:
             raise RuntimeError('Diff exception::' + de.message)
 
-        if m_CompareResult[0]:
+        if m_CompareResult:
             m_CompareResultFile = open(m_SucFullFileName, 'w')
             m_CompareResultFile.close()
             return True
 
-        if not m_CompareResult[0]:
+        if not m_CompareResult:
             self.__CompareFailedCount = self.__CompareFailedCount + 1
             logger.write("======= Diff file [" + m_DifFullFileName + "] >>>>> ")
             m_CompareResultFile = open(m_DifFullFileName, 'w', encoding="utf-8")
-            for line in m_CompareResult[1]:
+            for line in m_CompareResultList[::-1]:
                 m_CompareResultFile.write(line)
                 if self.__EnableConsoleOutPut:
                     logger.write("    " + line)
@@ -407,7 +429,7 @@ class RunCompare(object):
 if __name__ == '__main__':
     myCompare = RunCompare()
     sys.setrecursionlimit(2500)
-    #myCompare.Compare_Mask("TRUE")
+    myCompare.Compare_Mask("TRUE")
     myCompare.Compare_Files("C:\\Work\\linkoop\\robotframework-comparelibrary\\localtest\\join_number.log",
                             "C:\\Work\\linkoop\\robotframework-comparelibrary\\localtest\\join_number.ref"
                             )

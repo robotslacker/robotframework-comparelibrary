@@ -25,4 +25,4 @@ class CompareLibrary(RunCompare):
     """
     ROBOT_LIBRARY_SCOPE = 'GLOBAL'
     ROBOT_LIBRARY_DOC_FORMAT = 'TEXT'
-    ROBOT_LIBRARY_VERSION = '0.0.11'
+    ROBOT_LIBRARY_VERSION = '0.0.14'
