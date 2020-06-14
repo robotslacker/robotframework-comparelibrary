@@ -17,12 +17,12 @@ with open("CompareLibrary/__init__.py", "rb") as f:
         ast.literal_eval(_version_re.search(f.read().decode("utf-8")).group(1))
     )
 
-setup (
+setup(
     name='robotframework-comparelibrary',
     version=version,
     description='Robot Framework keyword library for textual diffing',
-    keywords     = 'robotframework testing test automation diff textual',
-    platforms    = 'any',
+    keywords='robotframework testing test automation diff textual',
+    platforms='any',
     install_requires=['robotframework', ],
 
     author='RobotSlacker',
@@ -30,6 +30,6 @@ setup (
     url='https://github.com/robotslacker/robotframework-comparelibrary',
 
     zip_safe=False,
-    packages     = ['CompareLibrary'],
-    package_data = {'CompareLibrary': []}
+    packages=['CompareLibrary'],
+    package_data={'CompareLibrary': []}
 )   
