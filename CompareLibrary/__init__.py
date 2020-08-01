@@ -13,6 +13,5 @@ class CompareLibrary(RunCompare):
     如何利用Robot来执行上述文件：
     $>  robot [test file]
     """
-    ROBOT_LIBRARY_SCOPE = 'GLOBAL'
     ROBOT_LIBRARY_DOC_FORMAT = 'TEXT'
-    ROBOT_LIBRARY_VERSION = '0.0.16'
+    ROBOT_LIBRARY_VERSION = '0.0.19'
